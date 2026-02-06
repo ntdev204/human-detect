@@ -19,7 +19,7 @@ export const Header = memo(function Header({ totalDetections }: HeaderProps) {
           </div>
           <div>
             <h1 className="text-lg font-bold">Human Detection</h1>
-            <p className="text-xs text-muted-foreground">Powered by YOLOv8</p>
+            <p className="text-xs text-muted-foreground">Nguyễn Ngọc Thiện</p>
           </div>
         </div>
 
