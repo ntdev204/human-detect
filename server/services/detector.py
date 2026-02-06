@@ -52,8 +52,8 @@ class DetectorService:
         Returns:
             Detection results with bounding boxes
         """
-        # Run inference with higher resolution for crowd detection
-        results = self.model(image, conf=conf_threshold, classes=[0], imgsz=1280, iou=0.5)  # class 0 = person in COCO
+        # Run inference - use 640 for faster inference on free tier
+        results = self.model(image, conf=conf_threshold, classes=[0], imgsz=640, iou=0.5)  # class 0 = person in COCO
         
         detections = []
         for result in results:
