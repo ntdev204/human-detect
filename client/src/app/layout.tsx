@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Human Detection - AI Powered",
+  title: "Nguyễn Ngọc Thiện - 223332853",
   description: "Real-time human detection using YOLOv8 and Next.js",
 };
 
