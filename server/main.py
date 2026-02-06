@@ -32,12 +32,12 @@ app = FastAPI(
 # CORS for Next.js client
 app.add_middleware(
     CORSMiddleware,
-    # allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://human-detect.ntdev.id.vn"],
-    allow_origins=["*"], # Debugging: Allow all temporarily
-    allow_credentials=True, # Note: allow_origins=["*"] + allow_credentials=True might fail in some browsers, but FastAPI handles it by echoing origin if not standard wildcard behavior. 
-    # Better approach for production with credentials is explicit list.
-    # Let's try explicit list + regex as fallback or just broad regex.
-    allow_origin_regex="https://.*", # Allow any https origin for now
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://human-detect.ntdev.id.vn",
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
