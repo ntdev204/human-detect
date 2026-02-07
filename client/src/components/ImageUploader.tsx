@@ -35,7 +35,7 @@ export function ImageUploader({ onDetection }: ImageUploaderProps) {
   } = useImageDetection(onDetection);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [confidence, setConfidence] = useState(0.5);
+  const [confidence, setConfidence] = useState(0.2);
   const [isDragging, setIsDragging] = useState(false);
 
   // UI Handlers that are specific to drag-and-drop interaction
