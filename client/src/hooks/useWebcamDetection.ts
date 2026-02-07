@@ -1,24 +1,23 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import {
-  DetectionWebSocket,
-  DetectionResult,
-  ConnectionStatus,
-} from "@/lib/api";
+import { detectBase64, DetectionResult } from "@/lib/api";
 import {
   DEFAULT_CONFIDENCE,
-  FRAME_INTERVAL_MS,
+  POLLING_INTERVAL_MS,
   IMAGE_QUALITY,
   WEBCAM_CONSTRAINTS,
 } from "@/lib/constants";
+
+type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error";
 
 export function useWebcamDetection(
   onDetection?: (result: DetectionResult) => void,
 ) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const wsRef = useRef<DetectionWebSocket | null>(null);
-  const lastFrameTime = useRef<number>(0);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const frameCount = useRef<number>(0);
+  const isProcessingRef = useRef<boolean>(false);
 
   const [isStreaming, setIsStreaming] = useState(false);
   const [connectionStatus, setConnectionStatus] =
@@ -40,49 +39,50 @@ export function useWebcamDetection(
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    let animationFrameId: number;
+  const processFrame = useCallback(async () => {
+    if (isProcessingRef.current) return;
 
-    const loop = () => {
-      if (!isStreaming) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
 
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
+    if (!video || !canvas || video.videoWidth === 0) return;
 
-      if (video && canvas && wsRef.current?.isConnected()) {
-        const now = performance.now();
-        const elapsed = now - lastFrameTime.current;
+    isProcessingRef.current = true;
 
-        if (elapsed > FRAME_INTERVAL_MS) {
-          lastFrameTime.current = now;
-          frameCount.current++;
+    try {
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
 
-          const ctx = canvas.getContext("2d");
-          if (ctx && video.videoWidth > 0 && video.videoHeight > 0) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0);
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
 
-            const imageData = canvas.toDataURL("image/jpeg", IMAGE_QUALITY);
-            wsRef.current.sendFrame(imageData, confidenceRef.current);
-          }
-        }
-      }
+      const imageData = canvas.toDataURL("image/jpeg", IMAGE_QUALITY);
 
-      animationFrameId = requestAnimationFrame(loop);
-    };
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = new AbortController();
 
-    if (isStreaming) {
-      loop();
+      const result = await detectBase64(
+        imageData,
+        confidenceRef.current,
+        abortControllerRef.current.signal,
+      );
+
+      frameCount.current++;
+      setLastResult(result);
+      onDetection?.(result);
+      setConnectionStatus("connected");
+    } catch {
+      // Ignore abort errors, log others silently
+    } finally {
+      isProcessingRef.current = false;
     }
-
-    return () => {
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-    };
-  }, [isStreaming]);
+  }, [onDetection]);
 
   const startStream = useCallback(async () => {
     try {
+      setConnectionStatus("connecting");
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: WEBCAM_CONSTRAINTS,
         audio: false,
@@ -93,31 +93,28 @@ export function useWebcamDetection(
         await videoRef.current.play();
       }
 
-      wsRef.current = new DetectionWebSocket({
-        onResult: (result) => {
-          setLastResult(result);
-          onDetection?.(result);
-        },
-        onStatusChange: setConnectionStatus,
-        onError: (error) => console.error("WebSocket error:", error),
-      });
-
-      wsRef.current.connect();
+      pollingRef.current = setInterval(processFrame, POLLING_INTERVAL_MS);
       setIsStreaming(true);
+      setConnectionStatus("connected");
     } catch (error) {
       console.error("Failed to start webcam:", error);
+      setConnectionStatus("error");
     }
-  }, [onDetection]);
+  }, [processFrame]);
 
   const stopStream = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+
+    abortControllerRef.current?.abort();
+
     if (videoRef.current?.srcObject) {
       const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
       tracks.forEach((track) => track.stop());
       videoRef.current.srcObject = null;
     }
-
-    wsRef.current?.disconnect();
-    wsRef.current = null;
 
     setIsStreaming(false);
     setLastResult(null);
